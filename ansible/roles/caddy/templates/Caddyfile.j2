@@ -1,21 +1,15 @@
-# autognosys.net — reverse proxy config
-# Auto-HTTPS is handled by Caddy automatically when a real domain is set
-# For now using the IP directly — HTTPS will activate once DNS is pointed
-
-:80 {
+autognosys.net {
     # Next.js website
-    handle / {
-        reverse_proxy localhost:3000
-    }
-
-    # FastAPI backend
     handle /api/* {
         reverse_proxy localhost:8000
     }
 
-    # OpenObserve UI
     handle /observability/* {
         reverse_proxy localhost:5080
+    }
+
+    handle {
+        reverse_proxy localhost:3000
     }
 
     # Structured JSON access logs
