@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenObserve observability backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/lib/openobserve
+Environment=ZO_ROOT_USER_EMAIL={{ openobserve_admin_email }}
+Environment=ZO_ROOT_USER_PASSWORD={{ openobserve_admin_password }}
+Environment=ZO_DATA_DIR=/var/lib/openobserve
+ExecStart=/usr/local/bin/openobserve
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

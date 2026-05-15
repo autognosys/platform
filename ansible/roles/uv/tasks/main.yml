@@ -1,0 +1,13 @@
+---
+- name: Check if uv is already installed
+  stat:
+    path: /usr/local/bin/uv
+  register: uv_binary
+
+- name: Download and install uv
+  shell: curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
+  when: not uv_binary.stat.exists
+
+- name: Verify uv installation
+  command: /usr/local/bin/uv --version
+  changed_when: false

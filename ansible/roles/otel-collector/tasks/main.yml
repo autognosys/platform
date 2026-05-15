@@ -1,0 +1,36 @@
+---
+- name: Check if otelcol is already installed
+  stat:
+    path: /usr/local/bin/otelcol-contrib
+  register: otelcol_binary
+
+- name: Set OTel Collector version
+  set_fact:
+    otelcol_version: "0.152.0"
+
+- name: Download OTel Collector contrib
+  get_url:
+    url: "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v{{ otelcol_version }}/otelcol-contrib_{{ otelcol_version }}_linux_amd64.deb"
+    dest: /tmp/otelcol-contrib.deb
+    mode: '0644'
+  when: not otelcol_binary.stat.exists
+
+- name: Install OTel Collector
+  apt:
+    deb: /tmp/otelcol-contrib.deb
+  when: not otelcol_binary.stat.exists
+
+- name: Deploy OTel Collector config
+  template:
+    src: otelcol-config.yml.j2
+    dest: /etc/otelcol-contrib/config.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart OTel Collector
+
+- name: Enable and start OTel Collector
+  systemd:
+    name: otelcol-contrib
+    enabled: true
+    state: started

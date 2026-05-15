@@ -1,0 +1,12 @@
+---
+- name: Configure autognosys VM
+  hosts: all
+  become: true
+  vars_files:
+    - vars.yml
+
+  roles:
+    - uv
+    - caddy
+    - otel-collector
+    - openobserve

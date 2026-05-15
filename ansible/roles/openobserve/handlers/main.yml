@@ -1,0 +1,6 @@
+---
+- name: Reload systemd and restart OpenObserve
+  systemd:
+    name: openobserve
+    state: restarted
+    daemon_reload: true

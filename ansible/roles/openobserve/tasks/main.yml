@@ -1,0 +1,47 @@
+---
+- name: Check if OpenObserve is already installed
+  stat:
+    path: /usr/local/bin/openobserve
+  register: openobserve_binary
+
+- name: Set OpenObserve version
+  set_fact:
+    openobserve_version: "0.14.6"
+
+- name: Download OpenObserve
+  get_url:
+    url: "https://github.com/openobserve/openobserve/releases/download/v{{ openobserve_version }}/openobserve-v{{ openobserve_version }}-linux-amd64.tar.gz"
+    dest: /tmp/openobserve.tar.gz
+    mode: '0644'
+  when: not openobserve_binary.stat.exists
+
+- name: Extract OpenObserve
+  unarchive:
+    src: /tmp/openobserve.tar.gz
+    dest: /usr/local/bin/
+    remote_src: true
+  when: not openobserve_binary.stat.exists
+
+- name: Create OpenObserve data directory
+  file:
+    path: /var/lib/openobserve
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Deploy OpenObserve systemd service
+  template:
+    src: openobserve.service.j2
+    dest: /etc/systemd/system/openobserve.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd and restart OpenObserve
+
+- name: Enable and start OpenObserve
+  systemd:
+    name: openobserve
+    enabled: true
+    state: started
+    daemon_reload: true
