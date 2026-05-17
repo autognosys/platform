@@ -4,9 +4,9 @@
   become: true
   vars_files:
     - vars.yml
-
   roles:
     - uv
+    - pm2
     - caddy
     - otel-collector
     - openobserve

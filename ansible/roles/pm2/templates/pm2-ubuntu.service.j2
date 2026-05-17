@@ -1,0 +1,18 @@
+[Unit]
+Description=PM2 process manager
+Documentation=https://pm2.keymetrics.io/
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin
+Environment=PM2_HOME=/home/ubuntu/.pm2
+ExecStart=/home/ubuntu/pm2-start.sh
+
+[Install]
+WantedBy=multi-user.target
