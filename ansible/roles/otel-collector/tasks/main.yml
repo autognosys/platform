@@ -1,7 +1,7 @@
 ---
 - name: Check if otelcol is already installed
   stat:
-    path: /usr/local/bin/otelcol-contrib
+    path: /usr/bin/otelcol-contrib
   register: otelcol_binary
 
 - name: Set OTel Collector version
