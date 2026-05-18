@@ -1,0 +1,19 @@
+name: CI - Ansible
+
+on:
+  pull_request:
+    paths:
+      - 'ansible/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Run ansible-lint
+        run: ansible-lint ansible/site.yml
