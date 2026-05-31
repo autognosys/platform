@@ -1,0 +1,9 @@
+skip_list:
+  - fqcn
+  - name-casing
+  - line-length
+  - no-changed-when
+
+warn_list:
+  - command-instead-of-module
+  - risky-shell-pipe
