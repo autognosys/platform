@@ -1,9 +1,10 @@
 skip_list:
-  - fqcn
-  - name-casing
-  - line-length
+  - fqcn[action-core]
+  - fqcn[action]
+  - name[casing]
+  - yaml[line-length]
   - no-changed-when
-
-warn_list:
   - command-instead-of-module
   - risky-shell-pipe
+
+warn_list: []
