@@ -28,3 +28,11 @@
   become: true
   become_user: ubuntu
   changed_when: false
+
+- name: Configure pm2 to start on boot
+  command: env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ubuntu --hp /home/ubuntu
+  become: true
+  become_user: ubuntu
+  changed_when: false
+  args:
+    creates: /etc/systemd/system/pm2-ubuntu.service
