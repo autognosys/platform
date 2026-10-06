@@ -3,3 +3,4 @@
   systemd:
     name: otelcol-contrib
     state: restarted
+  when: not (bake | bool)

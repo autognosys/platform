@@ -1,4 +1,3 @@
-cat > .gitignore << 'EOF'
 # Pulumi
 infra/.pulumi/
 infra/venv/
@@ -21,5 +20,13 @@ backend/venv/
 # OS
 .DS_Store
 Thumbs.db
-EOF
+
+# Ansible local variables (no longer used by the playbook)
 ansible/vars.yml
+
+# Packer
+packer/packer_cache/
+
+# Local GCP inventory dumps and stray files
+gcp-inventory-*/
+--ozone-platform=x11

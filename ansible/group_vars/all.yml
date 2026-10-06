@@ -1,0 +1,7 @@
+---
+# bake=true is passed by Packer (-e bake=true) when building the VM image.
+# In bake mode services are enabled for the next boot but not started:
+#   - OpenObserve and the OTel Collector need secrets that are only fetched at boot
+#   - Caddy must not request a TLS certificate from the image-build VM
+bake: false
+service_state: "{{ 'stopped' if (bake | bool) else 'started' }}"

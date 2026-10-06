@@ -1,11 +1,11 @@
 name: Deploy - Ansible
 
+# Manual only. VM configuration is now baked into the Packer image
+# (packer/autognosys-base.pkr.hcl) and applied at boot by autognosys-boot.sh.
+# Running this playbook against a live VM would rewrite the OpenObserve and
+# OTel units before their secret env files exist, so it no longer auto-runs.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'ansible/**'
+  workflow_dispatch:
 
 jobs:
   deploy:

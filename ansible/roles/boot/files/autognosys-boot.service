@@ -1,0 +1,15 @@
+[Unit]
+Description=Autognosys boot-time setup (code update and secrets)
+After=network-online.target
+Wants=network-online.target
+# Only ordering, not Requires: if this fails the site still starts.
+Before=pm2-ubuntu.service openobserve.service otelcol-contrib.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=900
+ExecStart=/usr/local/bin/autognosys-boot.sh
+
+[Install]
+WantedBy=multi-user.target

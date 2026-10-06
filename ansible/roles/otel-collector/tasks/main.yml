@@ -29,8 +29,27 @@
     mode: '0644'
   notify: Restart OTel Collector
 
+# The OpenObserve credentials reach the collector as an environment variable
+# (OPENOBSERVE_BASIC_AUTH), written to this file at boot by autognosys-boot.sh.
+- name: Create OTel Collector systemd drop-in directory
+  file:
+    path: /etc/systemd/system/otelcol-contrib.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install OTel Collector credentials drop-in
+  copy:
+    src: 10-openobserve.conf
+    dest: /etc/systemd/system/otelcol-contrib.service.d/10-openobserve.conf
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: Enable and start OTel Collector
   systemd:
     name: otelcol-contrib
     enabled: true
-    state: started
+    state: "{{ service_state }}"
+    daemon_reload: true

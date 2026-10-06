@@ -1,0 +1,52 @@
+---
+# Everything the old instance startup script installed on every boot:
+# base packages, Node.js 20 and PM2. Baked into the image instead.
+
+- name: Install base packages
+  apt:
+    name:
+      - acl
+      - ca-certificates
+      - curl
+      - git
+      - gnupg
+      - htop
+      - python3
+      - python3-pip
+      - python3-venv
+      - unzip
+      - vim
+    state: present
+    update_cache: true
+
+# On GCE the "ubuntu" user is normally created by the guest agent from instance
+# metadata. Create it here so file ownership works while the image is built.
+- name: Ensure ubuntu user exists
+  user:
+    name: ubuntu
+    shell: /bin/bash
+    create_home: true
+
+- name: Check whether Node.js is installed
+  stat:
+    path: /usr/bin/node
+  register: base_node_binary
+
+- name: Add NodeSource repository (Node.js 20)
+  shell: set -o pipefail && curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  when: not base_node_binary.stat.exists
+
+- name: Install Node.js
+  apt:
+    name: nodejs
+    state: present
+    update_cache: true
+
+# `command` instead of the npm module: community.general isn't part of ansible-core.
+- name: Install PM2 globally
+  command: npm install -g pm2
+  args:
+    creates: /usr/lib/node_modules/pm2/bin/pm2

@@ -43,5 +43,5 @@
   systemd:
     name: openobserve
     enabled: true
-    state: started
+    state: "{{ service_state }}"
     daemon_reload: true

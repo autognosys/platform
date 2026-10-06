@@ -1,0 +1,44 @@
+---
+# Bakes an initial checkout and build of the platform repo into the image so a
+# new VM starts serving quickly. autognosys-boot.sh pulls newer commits at boot
+# and rebuilds only when the code actually changed.
+
+- name: Create /app
+  file:
+    path: /app
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Clone or update the platform repo
+  git:
+    repo: https://github.com/autognosys/platform.git
+    dest: /app/platform
+    version: main
+  become: true
+  become_user: ubuntu
+
+- name: Install website dependencies
+  command: npm ci
+  args:
+    chdir: /app/platform/website
+  become: true
+  become_user: ubuntu
+  changed_when: true
+
+- name: Build website
+  command: npm run build
+  args:
+    chdir: /app/platform/website
+  become: true
+  become_user: ubuntu
+  changed_when: true
+
+- name: Install backend dependencies
+  command: /usr/local/bin/uv sync
+  args:
+    chdir: /app/platform/backend
+  become: true
+  become_user: ubuntu
+  changed_when: true
