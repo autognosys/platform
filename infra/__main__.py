@@ -9,6 +9,7 @@ config  = pulumi.Config("gcp")
 project = config.require("project")
 region  = config.get("region") or "us-central1"
 zone    = f"{region}-a"
+zone_b  = f"{region}-b"   # replica zone of the (now unattached) regional disk
 
 # ── VPC Network ───────────────────────────────────────────────────────────────
 network = gcp.compute.Network(
