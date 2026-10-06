@@ -33,6 +33,23 @@ firewall = gcp.compute.Firewall(
     source_ranges = ["0.0.0.0/0"],
 )
 
+# ── Firewall: Google health-check probes ──────────────────────────────────────
+# The MIG autohealing check (and later the load balancer's) probes port 8000
+# from Google's fixed probe ranges. Without this rule every probe times out and
+# the MIG reports the instance as unhealthy even though the app is fine.
+# Scoped to the instance tag instead of the whole network.
+health_check_firewall = gcp.compute.Firewall(
+    "autognosys-allow-health-checks",
+    name          = "autognosys-allow-health-checks",
+    network       = network.self_link,
+    project       = project,
+    allows        = [
+        gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["8000"]),
+    ],
+    source_ranges = ["130.211.0.0/22", "35.191.0.0/16"],
+    target_tags   = ["autognosys"],
+)
+
 # ── Static External IP ────────────────────────────────────────────────────────
 static_ip = gcp.compute.Address(
     "autognosys-ip",
