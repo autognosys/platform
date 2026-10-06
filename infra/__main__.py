@@ -1,6 +1,8 @@
 import pulumi
 import pulumi_gcp as gcp
 
+from auto_remediation import create_auto_remediation
+
 # ── Config ────────────────────────────────────────────────────────────────
 config  = pulumi.Config("gcp")
 project = config.require("project")
@@ -196,10 +198,27 @@ mig = gcp.compute.InstanceGroupManager(
         health_check      = health_check.self_link,
         initial_delay_sec = 300,
     ),
+
+    # Matches the manually-applied setting: RECREATE is required because
+    # SUBSTITUTE is incompatible with stateful disks (a stateful policy
+    # needs the same disk reattached, not a substitute instance), and
+    # max_surge must be 0 for RECREATE (no surge instance is created —
+    # the existing one is torn down and rebuilt in place).
+    update_policy = gcp.compute.InstanceGroupManagerUpdatePolicyArgs(
+        type                  = "PROACTIVE",
+        minimal_action        = "REPLACE",
+        replacement_method    = "RECREATE",
+        max_surge_fixed       = 0,
+        max_unavailable_fixed = 1,
+    ),
 )
+# ── Preemption auto-remediation Cloud Function ────────────────────────────────
+auto_remediation_function = create_auto_remediation(project=project, region=region)
+
 # ── Outputs ───────────────────────────────────────────────────────────────────
 pulumi.export("external_ip", static_ip.address)
 pulumi.export("zone",        zone)
 pulumi.export("mig_name",    mig.name)
 pulumi.export("data_disk",   data_disk.name)
 pulumi.export("ssh_command", pulumi.Output.concat("ssh ubuntu@", static_ip.address))
+pulumi.export("auto_remediation_function_name", auto_remediation_function.name)
