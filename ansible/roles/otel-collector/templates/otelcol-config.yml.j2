@@ -25,7 +25,7 @@ exporters:
   otlphttp:
     endpoint: http://localhost:5080/api/default
     headers:
-      Authorization: "Basic {{ openobserve_basic_auth }}"
+      Authorization: "Basic ${env:OPENOBSERVE_BASIC_AUTH}"
 
 service:
   pipelines:

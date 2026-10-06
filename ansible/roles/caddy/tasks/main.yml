@@ -54,4 +54,4 @@
   systemd:
     name: caddy
     enabled: true
-    state: started
+    state: "{{ service_state }}"

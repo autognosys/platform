@@ -1,12 +1,16 @@
 ---
+# Used by Packer (packer/autognosys-base.pkr.hcl) to build the VM image.
+# No secrets are needed here: OpenObserve and OTel credentials are fetched from
+# GCP Secret Manager at boot by roles/boot (autognosys-boot.sh).
 - name: Configure autognosys VM
   hosts: all
   become: true
-  vars_files:
-    - vars.yml
   roles:
+    - base
     - uv
+    - app
     - pm2
     - caddy
     - otel-collector
     - openobserve
+    - boot

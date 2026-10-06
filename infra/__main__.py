@@ -2,6 +2,7 @@ import pulumi
 import pulumi_gcp as gcp
 
 from auto_remediation import create_auto_remediation
+from boot_secrets import create_boot_secrets
 
 # ── Config ────────────────────────────────────────────────────────────────
 config  = pulumi.Config("gcp")
@@ -215,6 +216,10 @@ mig = gcp.compute.InstanceGroupManager(
 # ── Preemption auto-remediation Cloud Function ────────────────────────────────
 auto_remediation_function = create_auto_remediation(project=project, region=region)
 
+# ── Boot-time secrets (Secret Manager) + dedicated VM service account ─────────
+# Additive only: not yet attached to the instance template.
+vm_service_account, boot_secrets = create_boot_secrets(project=project)
+
 # ── Outputs ───────────────────────────────────────────────────────────────────
 pulumi.export("external_ip", static_ip.address)
 pulumi.export("zone",        zone)
@@ -222,3 +227,4 @@ pulumi.export("mig_name",    mig.name)
 pulumi.export("data_disk",   data_disk.name)
 pulumi.export("ssh_command", pulumi.Output.concat("ssh ubuntu@", static_ip.address))
 pulumi.export("auto_remediation_function_name", auto_remediation_function.name)
+pulumi.export("vm_service_account", vm_service_account.email)

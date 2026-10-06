@@ -6,8 +6,9 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/var/lib/openobserve
-Environment=ZO_ROOT_USER_EMAIL={{ openobserve_admin_email }}
-Environment=ZO_ROOT_USER_PASSWORD={{ openobserve_admin_password }}
+# ZO_ROOT_USER_EMAIL and ZO_ROOT_USER_PASSWORD come from this file, which
+# autognosys-boot.sh writes from GCP Secret Manager at boot.
+EnvironmentFile=/etc/openobserve/openobserve.env
 Environment=ZO_DATA_DIR=/var/lib/openobserve
 ExecStart=/usr/local/bin/openobserve
 Restart=on-failure

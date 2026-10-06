@@ -1,0 +1,23 @@
+---
+- name: Install boot script
+  copy:
+    src: autognosys-boot.sh
+    dest: /usr/local/bin/autognosys-boot.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install boot service
+  copy:
+    src: autognosys-boot.service
+    dest: /etc/systemd/system/autognosys-boot.service
+    owner: root
+    group: root
+    mode: '0644'
+
+# Enabled only: it runs at the next boot, never during the image build.
+- name: Enable boot service
+  systemd:
+    name: autognosys-boot
+    enabled: true
+    daemon_reload: true
