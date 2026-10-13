@@ -1,6 +1,0 @@
----
-- name: Reload Caddy
-  systemd:
-    name: caddy
-    state: reloaded
-  when: not (bake | bool)

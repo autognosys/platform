@@ -21,6 +21,8 @@ network = gcp.compute.Network(
 )
 
 # ── Firewall ──────────────────────────────────────────────────────────────────
+# SSH only. Web traffic reaches the VM from the load balancer's Google source
+# ranges (see load_balancer.py); ports 80/443 were Caddy's and are closed.
 firewall = gcp.compute.Firewall(
     "autognosys-firewall",
     name    = "autognosys-firewall",
@@ -28,8 +30,6 @@ firewall = gcp.compute.Firewall(
     project = project,
     allows  = [
         gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["22"]),
-        gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["80"]),
-        gcp.compute.FirewallAllowArgs(protocol="tcp", ports=["443"]),
     ],
     source_ranges = ["0.0.0.0/0"],
 )
