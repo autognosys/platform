@@ -3,6 +3,7 @@ import pulumi_gcp as gcp
 
 from auto_remediation import create_auto_remediation
 from boot_secrets import create_boot_secrets
+from load_balancer import NAMED_PORTS, create_load_balancer
 
 # ── Config ────────────────────────────────────────────────────────────────
 config  = pulumi.Config("gcp")
@@ -159,6 +160,12 @@ mig = gcp.compute.InstanceGroupManager(
     base_instance_name = "autognosys",
     target_size        = 1,
 
+    # Named ports the load balancer's backend services route to (load_balancer.py).
+    named_ports = [
+        gcp.compute.InstanceGroupManagerNamedPortArgs(name=n, port=p)
+        for n, p in NAMED_PORTS.items()
+    ],
+
     versions = [
         gcp.compute.InstanceGroupManagerVersionArgs(
             instance_template = instance_template.self_link_unique,
@@ -182,11 +189,21 @@ mig = gcp.compute.InstanceGroupManager(
         max_unavailable_fixed = 1,
     ),
 )
+# ── Global load balancer + Google-managed certificate ─────────────────────────
+lb_ip, lb_dns_auth, _, _, _ = create_load_balancer(
+    project=project, network=network, mig=mig, api_health_check=health_check,
+)
+
 # ── Preemption auto-remediation Cloud Function ────────────────────────────────
 auto_remediation_function = create_auto_remediation(project=project, region=region)
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 pulumi.export("external_ip", static_ip.address)
+pulumi.export("lb_ip",       lb_ip.address)   # switch the autognosys.net A record here LAST
+# CNAME to add at the DNS host so the certificate can validate (step 1 of cutover):
+pulumi.export("dns_auth_record_name", lb_dns_auth.dns_resource_records[0].name)
+pulumi.export("dns_auth_record_type", lb_dns_auth.dns_resource_records[0].type)
+pulumi.export("dns_auth_record_data", lb_dns_auth.dns_resource_records[0].data)
 pulumi.export("zone",        zone)
 pulumi.export("mig_name",    mig.name)
 pulumi.export("data_disk",   data_disk.name)
