@@ -1,0 +1,185 @@
+"""Global external Application Load Balancer in front of the MIG.
+
+Replaces what Caddy did on the VM:
+  - TLS termination      -> Google-managed certificate (no certificate state on the VM)
+  - path routing         -> URL map: /api/* -> :8000, /observability/* -> :5080, else :3000
+  - HTTP -> HTTPS        -> separate redirect URL map on port 80
+
+The load balancer talks plain HTTP straight to the app ports on the instance, so
+Caddy is not in the request path and its certificate problems no longer matter.
+Caddy stays running on the VM for now (it just fails to get a cert); turning it
+off is a follow-up bake of the image.
+
+Cutover is a DNS change: the managed certificate only goes ACTIVE once
+`domain` resolves to the load balancer's global IP.
+"""
+import pulumi
+import pulumi_gcp as gcp
+
+# Google's fixed probe / proxy source ranges (health checks and LB-to-backend traffic).
+GOOGLE_LB_RANGES = ["130.211.0.0/22", "35.191.0.0/16"]
+
+# Named ports the backend services refer to (declared on the MIG in __main__.py).
+NAMED_PORTS = {"web": 3000, "api": 8000, "obs": 5080}
+
+
+def create_load_balancer(
+    project: str,
+    network: gcp.compute.Network,
+    mig: gcp.compute.InstanceGroupManager,
+    api_health_check: gcp.compute.HealthCheck,
+    domain: str = "autognosys.net",
+):
+    # ── Firewall: probes + LB traffic to all three app ports ──────────────────
+    # The existing rule only opens 8000; the new backends need 3000 and 5080.
+    lb_firewall = gcp.compute.Firewall(
+        "autognosys-allow-lb-backends",
+        name          = "autognosys-allow-lb-backends",
+        network       = network.self_link,
+        project       = project,
+        allows        = [
+            gcp.compute.FirewallAllowArgs(
+                protocol="tcp", ports=[str(p) for p in NAMED_PORTS.values()],
+            ),
+        ],
+        source_ranges = GOOGLE_LB_RANGES,
+        target_tags   = ["autognosys"],
+    )
+
+    # ── Health checks for the two new backends (api reuses the existing one) ──
+    web_hc = gcp.compute.HealthCheck(
+        "autognosys-hc-web",
+        name    = "autognosys-hc-web",
+        project = project,
+        http_health_check = gcp.compute.HealthCheckHttpHealthCheckArgs(
+            port=NAMED_PORTS["web"], request_path="/",
+        ),
+        check_interval_sec  = 15,
+        timeout_sec         = 5,
+        healthy_threshold   = 2,
+        unhealthy_threshold = 3,
+    )
+    obs_hc = gcp.compute.HealthCheck(
+        "autognosys-hc-obs",
+        name    = "autognosys-hc-obs",
+        project = project,
+        http_health_check = gcp.compute.HealthCheckHttpHealthCheckArgs(
+            port=NAMED_PORTS["obs"], request_path="/healthz",
+        ),
+        check_interval_sec  = 15,
+        timeout_sec         = 5,
+        healthy_threshold   = 2,
+        unhealthy_threshold = 3,
+    )
+
+    # ── Backend services (one per app port) ───────────────────────────────────
+    def backend(name: str, port_name: str, hc: gcp.compute.HealthCheck):
+        return gcp.compute.BackendService(
+            f"autognosys-be-{name}",
+            name                  = f"autognosys-be-{name}",
+            project               = project,
+            protocol              = "HTTP",
+            port_name             = port_name,
+            load_balancing_scheme = "EXTERNAL_MANAGED",
+            timeout_sec           = 30,
+            connection_draining_timeout_sec = 10,
+            health_checks         = hc.id,
+            backends              = [
+                gcp.compute.BackendServiceBackendArgs(
+                    group           = mig.instance_group,
+                    balancing_mode  = "UTILIZATION",
+                    capacity_scaler = 1.0,
+                ),
+            ],
+        )
+
+    be_web = backend("web", "web", web_hc)
+    be_api = backend("api", "api", api_health_check)
+    be_obs = backend("obs", "obs", obs_hc)
+
+    # ── URL map: mirrors the Caddyfile routing ────────────────────────────────
+    url_map = gcp.compute.URLMap(
+        "autognosys-urlmap",
+        name            = "autognosys-urlmap",
+        project         = project,
+        default_service = be_web.id,
+        host_rules      = [
+            gcp.compute.URLMapHostRuleArgs(hosts=["*"], path_matcher="main"),
+        ],
+        path_matchers   = [
+            gcp.compute.URLMapPathMatcherArgs(
+                name            = "main",
+                default_service = be_web.id,
+                path_rules      = [
+                    gcp.compute.URLMapPathMatcherPathRuleArgs(
+                        paths=["/api/*"], service=be_api.id),
+                    gcp.compute.URLMapPathMatcherPathRuleArgs(
+                        paths=["/observability/*"], service=be_obs.id),
+                ],
+            ),
+        ],
+    )
+
+    # ── Global static IP, managed certificate, HTTPS front end ────────────────
+    lb_ip = gcp.compute.GlobalAddress(
+        "autognosys-lb-ip",
+        name    = "autognosys-lb-ip",
+        project = project,
+    )
+
+    # The name embeds the domain, so changing the domain yields a new name and
+    # Pulumi creates the replacement before deleting the old one (no gap).
+    cert = gcp.compute.ManagedSslCertificate(
+        "autognosys-cert",
+        name        = f"autognosys-cert-{domain.replace('.', '-')}",
+        project     = project,
+        managed     = gcp.compute.ManagedSslCertificateManagedArgs(domains=[domain]),
+    )
+
+    https_proxy = gcp.compute.TargetHttpsProxy(
+        "autognosys-https-proxy",
+        name             = "autognosys-https-proxy",
+        project          = project,
+        url_map          = url_map.id,
+        ssl_certificates = [cert.id],
+    )
+    https_rule = gcp.compute.GlobalForwardingRule(
+        "autognosys-https-rule",
+        name                  = "autognosys-https-rule",
+        project               = project,
+        target                = https_proxy.id,
+        port_range            = "443",
+        ip_protocol           = "TCP",
+        ip_address            = lb_ip.address,
+        load_balancing_scheme = "EXTERNAL_MANAGED",
+    )
+
+    # ── Port 80: permanent redirect to HTTPS ──────────────────────────────────
+    redirect_map = gcp.compute.URLMap(
+        "autognosys-redirect-urlmap",
+        name    = "autognosys-redirect-urlmap",
+        project = project,
+        default_url_redirect = gcp.compute.URLMapDefaultUrlRedirectArgs(
+            https_redirect         = True,
+            redirect_response_code = "MOVED_PERMANENTLY_DEFAULT",
+            strip_query            = False,
+        ),
+    )
+    http_proxy = gcp.compute.TargetHttpProxy(
+        "autognosys-http-proxy",
+        name    = "autognosys-http-proxy",
+        project = project,
+        url_map = redirect_map.id,
+    )
+    http_rule = gcp.compute.GlobalForwardingRule(
+        "autognosys-http-rule",
+        name                  = "autognosys-http-rule",
+        project               = project,
+        target                = http_proxy.id,
+        port_range            = "80",
+        ip_protocol           = "TCP",
+        ip_address            = lb_ip.address,
+        load_balancing_scheme = "EXTERNAL_MANAGED",
+    )
+
+    return lb_ip, cert, https_rule, http_rule, lb_firewall
