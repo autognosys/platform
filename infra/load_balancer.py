@@ -1,7 +1,7 @@
 """Global external Application Load Balancer in front of the MIG.
 
 Replaces what Caddy did on the VM:
-  - TLS termination      -> Google-managed certificate (no certificate state on the VM)
+  - TLS termination      -> Certificate Manager cert, DNS-authorized (no cert state on the VM)
   - path routing         -> URL map: /api/* -> :8000, /observability/* -> :5080, else :3000
   - HTTP -> HTTPS        -> separate redirect URL map on port 80
 
@@ -10,8 +10,10 @@ Caddy is not in the request path and its certificate problems no longer matter.
 Caddy stays running on the VM for now (it just fails to get a cert); turning it
 off is a follow-up bake of the image.
 
-Cutover is a DNS change: the managed certificate only goes ACTIVE once
-`domain` resolves to the load balancer's global IP.
+Cutover order (no outage):
+  1. pulumi up, then add the exported CNAME (dns_auth_record_*) at the DNS host
+  2. wait for the certificate to become ACTIVE
+  3. verify the load balancer with curl --resolve, then switch the A record to lb_ip
 """
 import pulumi
 import pulumi_gcp as gcp
@@ -127,21 +129,48 @@ def create_load_balancer(
         project = project,
     )
 
-    # The name embeds the domain, so changing the domain yields a new name and
-    # Pulumi creates the replacement before deleting the old one (no gap).
-    cert = gcp.compute.ManagedSslCertificate(
+    # Certificate Manager with DNS authorization: the cert is validated through a
+    # CNAME at the DNS host (exported below), NOT by the domain pointing at this
+    # load balancer. So it goes ACTIVE while the site is still served from the
+    # old IP, and the A-record switch afterwards causes no TLS gap.
+    # Needs the certificatemanager.googleapis.com API enabled on the project.
+    dns_auth = gcp.certificatemanager.DnsAuthorization(
+        "autognosys-dns-auth",
+        name    = f"autognosys-dnsauth-{domain.replace('.', '-')}",
+        project = project,
+        domain  = domain,
+    )
+    cert = gcp.certificatemanager.Certificate(
         "autognosys-cert",
-        name        = f"autognosys-cert-{domain.replace('.', '-')}",
-        project     = project,
-        managed     = gcp.compute.ManagedSslCertificateManagedArgs(domains=[domain]),
+        name    = f"autognosys-cert-{domain.replace('.', '-')}",
+        project = project,
+        managed = gcp.certificatemanager.CertificateManagedArgs(
+            domains            = [domain],
+            dns_authorizations = [dns_auth.id],
+        ),
+    )
+    cert_map = gcp.certificatemanager.CertificateMap(
+        "autognosys-cert-map",
+        name    = "autognosys-cert-map",
+        project = project,
+    )
+    cert_map_entry = gcp.certificatemanager.CertificateMapEntry(
+        "autognosys-cert-map-entry",
+        name         = "autognosys-cert-map-entry",
+        project      = project,
+        map          = cert_map.name,
+        certificates = [cert.id],
+        hostname     = domain,
     )
 
     https_proxy = gcp.compute.TargetHttpsProxy(
         "autognosys-https-proxy",
-        name             = "autognosys-https-proxy",
-        project          = project,
-        url_map          = url_map.id,
-        ssl_certificates = [cert.id],
+        name            = "autognosys-https-proxy",
+        project         = project,
+        url_map         = url_map.id,
+        certificate_map = pulumi.Output.concat(
+            "//certificatemanager.googleapis.com/", cert_map.id),
+        opts            = pulumi.ResourceOptions(depends_on=[cert_map_entry]),
     )
     https_rule = gcp.compute.GlobalForwardingRule(
         "autognosys-https-rule",
@@ -182,4 +211,4 @@ def create_load_balancer(
         load_balancing_scheme = "EXTERNAL_MANAGED",
     )
 
-    return lb_ip, cert, https_rule, http_rule, lb_firewall
+    return lb_ip, dns_auth, https_rule, http_rule, lb_firewall

@@ -190,7 +190,7 @@ mig = gcp.compute.InstanceGroupManager(
     ),
 )
 # ── Global load balancer + Google-managed certificate ─────────────────────────
-lb_ip, lb_cert, _, _, _ = create_load_balancer(
+lb_ip, lb_dns_auth, _, _, _ = create_load_balancer(
     project=project, network=network, mig=mig, api_health_check=health_check,
 )
 
@@ -199,7 +199,11 @@ auto_remediation_function = create_auto_remediation(project=project, region=regi
 
 # ── Outputs ───────────────────────────────────────────────────────────────────
 pulumi.export("external_ip", static_ip.address)
-pulumi.export("lb_ip",       lb_ip.address)   # point the autognosys.net A record here
+pulumi.export("lb_ip",       lb_ip.address)   # switch the autognosys.net A record here LAST
+# CNAME to add at the DNS host so the certificate can validate (step 1 of cutover):
+pulumi.export("dns_auth_record_name", lb_dns_auth.dns_resource_records[0].name)
+pulumi.export("dns_auth_record_type", lb_dns_auth.dns_resource_records[0].type)
+pulumi.export("dns_auth_record_data", lb_dns_auth.dns_resource_records[0].data)
 pulumi.export("zone",        zone)
 pulumi.export("mig_name",    mig.name)
 pulumi.export("data_disk",   data_disk.name)
