@@ -5,6 +5,9 @@ Replaces what Caddy did on the VM:
   - path routing         -> URL map: /api/* -> :8000, /observability/* -> :5080, else :3000
   - HTTP -> HTTPS        -> separate redirect URL map on port 80
 
+`instance_groups` is a list of instance-group URLs (zonal or regional MIGs); every
+backend service load-balances across all of them.
+
 The load balancer talks plain HTTP straight to the app ports on the instance, so
 Caddy has been retired: it is gone from the image, and request logging on the
 backend services replaces its access.log.
@@ -27,7 +30,7 @@ NAMED_PORTS = {"web": 3000, "api": 8000, "obs": 5080}
 def create_load_balancer(
     project: str,
     network: gcp.compute.Network,
-    mig: gcp.compute.InstanceGroupManager,
+    instance_groups: list,
     api_health_check: gcp.compute.HealthCheck,
     domain: str = "autognosys.net",
 ):
@@ -90,10 +93,11 @@ def create_load_balancer(
             ),
             backends              = [
                 gcp.compute.BackendServiceBackendArgs(
-                    group           = mig.instance_group,
+                    group           = group,
                     balancing_mode  = "UTILIZATION",
                     capacity_scaler = 1.0,
-                ),
+                )
+                for group in instance_groups
             ],
         )
 
