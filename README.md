@@ -17,7 +17,7 @@ AI-powered Platform Engineering and AIOps infrastructure.
 ## Stack
 - **IaC**: Pulumi (Python)
 - **Config management**: Ansible
-- **Reverse proxy**: Caddy
+- **Load balancer / TLS**: GCP global external Application Load Balancer with a Certificate Manager certificate (`infra/load_balancer.py`)
 - **Frontend**: Next.js + Tailwind
 - **Backend**: FastAPI + LangChain
 - **Observability**: OpenTelemetry + OpenObserve

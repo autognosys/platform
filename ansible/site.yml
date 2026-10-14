@@ -10,7 +10,6 @@
     - uv
     - app
     - pm2
-    - caddy
     - otel-collector
     - openobserve
     - boot

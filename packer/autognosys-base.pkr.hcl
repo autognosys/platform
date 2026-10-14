@@ -1,4 +1,4 @@
-# Builds the Autognosys VM image: runtimes, Caddy, OTel Collector, OpenObserve,
+# Builds the Autognosys VM image: runtimes, OTel Collector, OpenObserve,
 # and an initial build of the app. No secrets are baked in; autognosys-boot.sh
 # fetches them from GCP Secret Manager at boot.
 #
@@ -59,7 +59,7 @@ source "googlecompute" "base" {
 
   image_name        = "autognosys-base-${local.timestamp}"
   image_family      = "autognosys-base"
-  image_description = "Autognosys VM image: Node, PM2, uv, Caddy, OTel Collector, OpenObserve, app build"
+  image_description = "Autognosys VM image: Node, PM2, uv, OTel Collector, OpenObserve, app build"
   image_labels = {
     built-by = "packer"
   }
@@ -70,6 +70,7 @@ build {
 
   provisioner "ansible" {
     playbook_file = "${path.root}/../ansible/site.yml"
+    user          = "packer"
     extra_arguments = [
       "-e", "bake=true",
       "-e", "ansible_python_interpreter=/usr/bin/python3",

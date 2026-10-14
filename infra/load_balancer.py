@@ -6,9 +6,8 @@ Replaces what Caddy did on the VM:
   - HTTP -> HTTPS        -> separate redirect URL map on port 80
 
 The load balancer talks plain HTTP straight to the app ports on the instance, so
-Caddy is not in the request path and its certificate problems no longer matter.
-Caddy stays running on the VM for now (it just fails to get a cert); turning it
-off is a follow-up bake of the image.
+Caddy has been retired: it is gone from the image, and request logging on the
+backend services replaces its access.log.
 
 Cutover order (no outage):
   1. pulumi up, then add the exported CNAME (dns_auth_record_*) at the DNS host
@@ -86,6 +85,9 @@ def create_load_balancer(
             timeout_sec           = 30,
             connection_draining_timeout_sec = 10,
             health_checks         = hc.id,
+            log_config            = gcp.compute.BackendServiceLogConfigArgs(
+                enable=True, sample_rate=1.0,
+            ),
             backends              = [
                 gcp.compute.BackendServiceBackendArgs(
                     group           = mig.instance_group,
