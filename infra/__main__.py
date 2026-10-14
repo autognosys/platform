@@ -197,9 +197,59 @@ mig = gcp.compute.InstanceGroupManager(
         max_unavailable_fixed = 0,
     ),
 )
+
+# ── Regional Managed Instance Group (zone redundancy) ─────────────────────────
+# Two spot VMs spread evenly over two zones. If one zone has an outage or a spot
+# stockout, the load balancer keeps sending traffic to the VM in the other.
+# Migration: this group is added next to the zonal MIG above and both are
+# attached to the backend services; the zonal MIG is removed in a second step
+# once the regional one is healthy.
+rmig = gcp.compute.RegionInstanceGroupManager(
+    "autognosys-rmig",
+    name               = "autognosys-rmig",
+    region             = region,
+    project            = project,
+    base_instance_name = "autognosys",
+    target_size        = 2,
+
+    distribution_policy_zones        = [zone, zone_b],
+    distribution_policy_target_shape = "EVEN",
+
+    named_ports = [
+        gcp.compute.RegionInstanceGroupManagerNamedPortArgs(name=n, port=p)
+        for n, p in NAMED_PORTS.items()
+    ],
+
+    versions = [
+        gcp.compute.RegionInstanceGroupManagerVersionArgs(
+            instance_template = instance_template.self_link_unique,
+        ),
+    ],
+
+    auto_healing_policies = gcp.compute.RegionInstanceGroupManagerAutoHealingPoliciesArgs(
+        health_check      = health_check.self_link,
+        initial_delay_sec = 300,
+    ),
+
+    # A regional MIG needs a fixed surge of at least the number of zones (2).
+    # max_unavailable 0 keeps both VMs serving until their replacements pass the
+    # health check. Redistribution is off so the group never deletes a healthy
+    # VM just to rebalance zones (boot disks are disposable but not free to lose).
+    update_policy = gcp.compute.RegionInstanceGroupManagerUpdatePolicyArgs(
+        type                         = "PROACTIVE",
+        minimal_action               = "REPLACE",
+        replacement_method           = "SUBSTITUTE",
+        instance_redistribution_type = "NONE",
+        max_surge_fixed              = 2,
+        max_unavailable_fixed        = 0,
+    ),
+)
+
 # ── Global load balancer + Google-managed certificate ─────────────────────────
 lb_ip, lb_dns_auth, _, _, _ = create_load_balancer(
-    project=project, network=network, mig=mig, api_health_check=health_check,
+    project=project, network=network,
+    instance_groups=[mig.instance_group, rmig.instance_group],
+    api_health_check=health_check,
 )
 
 # ── Preemption auto-remediation Cloud Function ────────────────────────────────
@@ -213,6 +263,7 @@ pulumi.export("dns_auth_record_type", lb_dns_auth.dns_resource_records[0].type)
 pulumi.export("dns_auth_record_data", lb_dns_auth.dns_resource_records[0].data)
 pulumi.export("zone",        zone)
 pulumi.export("mig_name",    mig.name)
+pulumi.export("regional_mig_name", rmig.name)
 pulumi.export("data_disk",   data_disk.name)
 # Instance names and (ephemeral) IPs change on every recreation, so SSH by name:
 pulumi.export("ssh_command", pulumi.Output.concat(
