@@ -70,6 +70,7 @@ build {
 
   provisioner "ansible" {
     playbook_file = "${path.root}/../ansible/site.yml"
+    user          = "packer"
     extra_arguments = [
       "-e", "bake=true",
       "-e", "ansible_python_interpreter=/usr/bin/python3",
