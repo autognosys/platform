@@ -157,53 +157,10 @@ instance_template = gcp.compute.InstanceTemplate(
     opts = pulumi.ResourceOptions(depends_on=[firewall]),
 )
 
-# ── Managed Instance Group ────────────────────────────────────────────────────
-# ── Managed Instance Group ────────────────────────────────────────────────────
-mig = gcp.compute.InstanceGroupManager(
-    "autognosys-mig",
-    name               = "autognosys-mig",
-    zone               = zone,
-    project            = project,
-    base_instance_name = "autognosys",
-    target_size        = 1,
-
-    # Named ports the load balancer's backend services route to (load_balancer.py).
-    named_ports = [
-        gcp.compute.InstanceGroupManagerNamedPortArgs(name=n, port=p)
-        for n, p in NAMED_PORTS.items()
-    ],
-
-    versions = [
-        gcp.compute.InstanceGroupManagerVersionArgs(
-            instance_template = instance_template.self_link_unique,
-        ),
-    ],
-
-    auto_healing_policies = gcp.compute.InstanceGroupManagerAutoHealingPoliciesArgs(
-        health_check      = health_check.self_link,
-        initial_delay_sec = 300,
-    ),
-
-    # SUBSTITUTE with surge: a new instance (fresh name, fresh boot disk) is
-    # created and must pass the autohealing health check before the old one is
-    # deleted, and max_unavailable 0 keeps the old one serving meanwhile. The
-    # load balancer owns the public IP, so a rollout no longer means downtime.
-    # Needs room for two e2-medium spot instances during a rollout.
-    update_policy = gcp.compute.InstanceGroupManagerUpdatePolicyArgs(
-        type                  = "PROACTIVE",
-        minimal_action        = "REPLACE",
-        replacement_method    = "SUBSTITUTE",
-        max_surge_fixed       = 1,
-        max_unavailable_fixed = 0,
-    ),
-)
-
-# ── Regional Managed Instance Group (zone redundancy) ─────────────────────────
+# ── Managed Instance Group (regional, zone redundancy) ────────────────────────
 # Two spot VMs spread evenly over two zones. If one zone has an outage or a spot
 # stockout, the load balancer keeps sending traffic to the VM in the other.
-# Migration: this group is added next to the zonal MIG above and both are
-# attached to the backend services; the zonal MIG is removed in a second step
-# once the regional one is healthy.
+# (This replaced the single-zone autognosys-mig.)
 rmig = gcp.compute.RegionInstanceGroupManager(
     "autognosys-rmig",
     name               = "autognosys-rmig",
@@ -248,7 +205,7 @@ rmig = gcp.compute.RegionInstanceGroupManager(
 # ── Global load balancer + Google-managed certificate ─────────────────────────
 lb_ip, lb_dns_auth, _, _, _ = create_load_balancer(
     project=project, network=network,
-    instance_groups=[mig.instance_group, rmig.instance_group],
+    instance_groups=[rmig.instance_group],
     api_health_check=health_check,
 )
 
@@ -262,12 +219,11 @@ pulumi.export("dns_auth_record_name", lb_dns_auth.dns_resource_records[0].name)
 pulumi.export("dns_auth_record_type", lb_dns_auth.dns_resource_records[0].type)
 pulumi.export("dns_auth_record_data", lb_dns_auth.dns_resource_records[0].data)
 pulumi.export("zone",        zone)
-pulumi.export("mig_name",    mig.name)
-pulumi.export("regional_mig_name", rmig.name)
+pulumi.export("mig_name",    rmig.name)
 pulumi.export("data_disk",   data_disk.name)
 # Instance names and (ephemeral) IPs change on every recreation, so SSH by name:
 pulumi.export("ssh_command", pulumi.Output.concat(
-    "gcloud compute instance-groups managed list-instances ", mig.name,
-    " --zone ", zone, "  # then: gcloud compute ssh ubuntu@<instance> --zone ", zone))
+    "gcloud compute instance-groups managed list-instances ", rmig.name,
+    " --region ", region, "  # then: gcloud compute ssh ubuntu@<instance> --zone <its zone>"))
 pulumi.export("auto_remediation_function_name", auto_remediation_function.name)
 pulumi.export("vm_service_account", vm_service_account.email)
