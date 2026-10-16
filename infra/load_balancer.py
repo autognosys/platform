@@ -3,7 +3,7 @@
 Replaces what Caddy did on the VM:
   - TLS termination      -> Certificate Manager cert, DNS-authorized (no cert state on the VM)
   - path routing         -> URL map: /api/* -> :8000, /observability/* -> :5080, else :3000
-  - HTTP -> HTTPS        -> separate redirect URL map on port 80
+  - HTTP -> HTTPS        -> not provided (no port-80 listener, to save a forwarding rule)
 
 `instance_groups` is a list of instance-group URLs (zonal or regional MIGs); every
 backend service load-balances across all of them.
@@ -189,32 +189,10 @@ def create_load_balancer(
         load_balancing_scheme = "EXTERNAL_MANAGED",
     )
 
-    # ── Port 80: permanent redirect to HTTPS ──────────────────────────────────
-    redirect_map = gcp.compute.URLMap(
-        "autognosys-redirect-urlmap",
-        name    = "autognosys-redirect-urlmap",
-        project = project,
-        default_url_redirect = gcp.compute.URLMapDefaultUrlRedirectArgs(
-            https_redirect         = True,
-            redirect_response_code = "MOVED_PERMANENTLY_DEFAULT",
-            strip_query            = False,
-        ),
-    )
-    http_proxy = gcp.compute.TargetHttpProxy(
-        "autognosys-http-proxy",
-        name    = "autognosys-http-proxy",
-        project = project,
-        url_map = redirect_map.id,
-    )
-    http_rule = gcp.compute.GlobalForwardingRule(
-        "autognosys-http-rule",
-        name                  = "autognosys-http-rule",
-        project               = project,
-        target                = http_proxy.id,
-        port_range            = "80",
-        ip_protocol           = "TCP",
-        ip_address            = lb_ip.address,
-        load_balancing_scheme = "EXTERNAL_MANAGED",
-    )
+    # No port-80 listener: a second forwarding rule costs about as much as the VMs
+    # (roughly Rs 50 a day), so http://autognosys.net is not served and only
+    # https:// works. To bring the redirect back, restore the URL map, target
+    # HTTP proxy and port-80 GlobalForwardingRule from git history (the commit
+    # that removed them).
 
-    return lb_ip, dns_auth, https_rule, http_rule, lb_firewall
+    return lb_ip, dns_auth, https_rule, lb_firewall
