@@ -10,7 +10,7 @@ config  = pulumi.Config("gcp")
 project = config.require("project")
 region  = config.get("region") or "us-central1"
 zone    = f"{region}-a"
-zone_b  = f"{region}-b"   # replica zone of the (now unattached) regional disk
+zone_b  = f"{region}-b"   # second zone of the regional MIG
 
 # ── VPC Network ───────────────────────────────────────────────────────────────
 network = gcp.compute.Network(
@@ -51,35 +51,9 @@ health_check_firewall = gcp.compute.Firewall(
     target_tags   = ["autognosys"],
 )
 
-# ── Static External IP (no longer attached) ───────────────────────────────────
-# The instance template no longer pins this address: the load balancer owns the
-# public IP (autognosys-lb-ip), and a pinned address would stop the MIG from
-# surging a second instance. Kept only so this change does not release the
-# address while the old VM may still hold it. Delete in a follow-up PR once the
-# rollout has finished and `gcloud compute addresses describe autognosys-ip`
-# shows no users.
-static_ip = gcp.compute.Address(
-    "autognosys-ip",
-    name    = "autognosys-ip",
-    region  = region,
-    project = project,
-)
-
-# ── Persistent Data Disk (regional) ──────────────────────────────────────────
-# Regional PDs are replicated across two zones and can be referenced in
-# instance templates (zonal disks cannot). Replicated across -a and -b.
-# NO LONGER ATTACHED to anything after the image rollout (OpenObserve data now
-# lives on the boot disk). Kept only so Pulumi does not try to delete it while the
-# old VM may still hold it. Remove in a follow-up PR once the old VM is gone.
-data_disk = gcp.compute.RegionDisk(
-    "autognosys-data",
-    name          = "autognosys-data",
-    region        = region,
-    project       = project,
-    type          = "pd-balanced",
-    size          = 20,
-    replica_zones = [zone, zone_b],
-)
+# (The old per-VM static IP and the unattached regional data disk were deleted
+# to save cost: the load balancer owns the public IP and OpenObserve data lives
+# on the boot disks.)
 
 # ── Health Check ──────────────────────────────────────────────────────────────
 health_check = gcp.compute.HealthCheck(
@@ -203,7 +177,7 @@ rmig = gcp.compute.RegionInstanceGroupManager(
 )
 
 # ── Global load balancer + Google-managed certificate ─────────────────────────
-lb_ip, lb_dns_auth, _, _, _ = create_load_balancer(
+lb_ip, lb_dns_auth, _, _ = create_load_balancer(
     project=project, network=network,
     instance_groups=[rmig.instance_group],
     api_health_check=health_check,
@@ -220,7 +194,6 @@ pulumi.export("dns_auth_record_type", lb_dns_auth.dns_resource_records[0].type)
 pulumi.export("dns_auth_record_data", lb_dns_auth.dns_resource_records[0].data)
 pulumi.export("zone",        zone)
 pulumi.export("mig_name",    rmig.name)
-pulumi.export("data_disk",   data_disk.name)
 # Instance names and (ephemeral) IPs change on every recreation, so SSH by name:
 pulumi.export("ssh_command", pulumi.Output.concat(
     "gcloud compute instance-groups managed list-instances ", rmig.name,
